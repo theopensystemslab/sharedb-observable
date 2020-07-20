@@ -19,6 +19,7 @@ function useFlow(config: {
   state: Flow | null;
   addNode: () => void;
   removeNode: (id: string) => void;
+  reset: (flow: Flow) => void;
 } {
   const [state, setState] = React.useState<Flow | null>(null);
 
@@ -29,12 +30,12 @@ function useFlow(config: {
       setState(JSON.parse(JSON.stringify(doc.data)));
 
     connectToDB(doc).then(() => {
-      console.log("connecting to db");
       cloneStateFromShareDB();
       doc.on("op", cloneStateFromShareDB);
     });
 
     return () => {
+      setState(null);
       doc.destroy();
     };
   }, [doc]);
@@ -50,10 +51,18 @@ function useFlow(config: {
     [doc]
   );
 
+  const reset = React.useCallback(
+    (flow) => {
+      doc.submitOp([{ p: [], od: doc.data, oi: flow }]);
+    },
+    [doc]
+  );
+
   return {
     state,
     addNode,
     removeNode,
+    reset,
   };
 }
 
@@ -75,6 +84,17 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
         }}
       >
         ADD
+      </button>
+      <button
+        onClick={() => {
+          fetch("/flow.json")
+            .then((res) => res.json())
+            .then((flowData) => {
+              flow.reset(flowData);
+            });
+        }}
+      >
+        RESET
       </button>
     </div>
   );
@@ -109,7 +129,7 @@ const App = () => {
     if (id === null) {
       history.push(`#${randomWords()}`);
     }
-  }, [id]);
+  }, [id, history]);
 
   if (id === null) {
     return <p>Redirecting...</p>;

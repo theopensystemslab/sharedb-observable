@@ -13,6 +13,7 @@ type Flow = {
   edges: Array<[string | null, string]>;
 };
 
+// Custom hook for talking to a flow in ShareDB
 function useFlow(config: {
   id: string;
 }): {
@@ -21,6 +22,8 @@ function useFlow(config: {
   removeNode: (id: string) => void;
   reset: (flow: Flow) => void;
 } {
+  // Setup
+
   const [state, setState] = React.useState<Flow | null>(null);
 
   const doc = useMemo(() => getConnection(config.id), [config.id]);
@@ -40,6 +43,8 @@ function useFlow(config: {
     };
   }, [doc]);
 
+  // Methods
+
   const addNode = React.useCallback(() => {
     doc.submitOp([{ p: ["nodes", randomWords()], oi: {} }]);
   }, [doc]);
@@ -57,6 +62,8 @@ function useFlow(config: {
     },
     [doc]
   );
+
+  // Public API
 
   return {
     state,
@@ -118,13 +125,13 @@ const App = () => {
   const location = useLocation();
 
   const id = React.useMemo(() => {
-    console.log("new ID");
     if (location.hash.length < 2) {
       return null;
     }
     return location.hash.slice(1);
   }, [location]);
 
+  // If there is no ID readable from the hash, redirect to a freshly created one
   useEffect(() => {
     if (id === null) {
       history.push(`#${randomWords()}`);

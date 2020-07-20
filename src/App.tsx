@@ -1,4 +1,5 @@
 import randomWords from "random-words";
+import { v4 as uuid } from "uuid";
 import React, { useEffect, useMemo } from "react";
 import { connectToDB, getConnection } from "./sharedb";
 import {
@@ -8,8 +9,12 @@ import {
   useLocation,
 } from "react-router-dom";
 
+interface Node {
+  text: string;
+}
+
 type Flow = {
-  nodes: Record<string, {}>;
+  nodes: Record<string, Node>;
   edges: Array<[string | null, string]>;
 };
 
@@ -46,7 +51,7 @@ function useFlow(config: {
   // Methods
 
   const addNode = React.useCallback(() => {
-    doc.submitOp([{ p: ["nodes", randomWords()], oi: {} }]);
+    doc.submitOp([{ p: ["nodes", uuid()], oi: { text: randomWords() } }]);
   }, [doc]);
 
   const removeNode = React.useCallback(
@@ -81,16 +86,13 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
   }
 
   return (
-    <div>
-      {Object.keys(flow.state.nodes).map((k) => (
-        <Node key={k} onRemove={flow.removeNode} id={k} />
-      ))}
+    <main>
       <button
         onClick={() => {
           flow.addNode();
         }}
       >
-        ADD
+        Add
       </button>
       <button
         onClick={() => {
@@ -101,24 +103,66 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
             });
         }}
       >
-        RESET
+        Import flow
       </button>
-    </div>
+      <button
+        onClick={() => {
+          flow.reset({
+            nodes: {},
+            edges: [],
+          });
+        }}
+      >
+        Reset
+      </button>
+      {Object.keys(flow.state.nodes).map((k) => (
+        <NodeView
+          key={k}
+          onRemove={flow.removeNode}
+          id={k}
+          node={flow.state.nodes[k]}
+        />
+      ))}
+    </main>
   );
 };
 
-const Node = React.memo(
-  ({ id, onRemove }: { id: string; onRemove: (id: string) => void }) => (
-    <h1
-      onClick={() => {
-        // remove the node
-        onRemove(id);
-      }}
-    >
-      {id} {Math.round(Math.random() * 1000)}
-    </h1>
-  )
+const NodeView = React.memo(
+  ({
+    id,
+    node,
+    onRemove,
+  }: {
+    id: string;
+    node: Node;
+    onRemove: (id: string) => void;
+  }) => (
+    <div className="node">
+      <button
+        className="remove-button"
+        onClick={() => {
+          onRemove(id);
+        }}
+      >
+        ×
+      </button>
+      <p>
+        {node.text || "unset"} {Math.round(Math.random() * 1000)}
+      </p>
+    </div>
+  ),
+  (prevProps, nextProps) =>
+    prevProps.id === nextProps.id &&
+    prevProps.onRemove === nextProps.onRemove &&
+    JSON.stringify(prevProps.node) === JSON.stringify(nextProps.node)
 );
+
+const SimpleLink = ({ to }: { to: string }) => {
+  const location = useLocation();
+  return (
+    <Link to={to}>{location.hash === to ? <strong>{to}</strong> : to}</Link>
+  );
+};
 
 const App = () => {
   const history = useHistory();
@@ -145,7 +189,8 @@ const App = () => {
   return (
     <div>
       <nav>
-        <Link to="#direct">#direct</Link> <Link to="#captain">#captain</Link>{" "}
+        <SimpleLink to="#direct" />
+        <SimpleLink to="#captain" />
         <button
           onClick={() => {
             history.push(`#${randomWords()}`);

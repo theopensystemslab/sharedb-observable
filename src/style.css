@@ -1,0 +1,41 @@
+nav {
+  padding: 20px;
+  border-bottom: 1px solid #cecece;
+}
+
+main {
+  padding: 20px;
+}
+
+button,
+a {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.node {
+  display: flex;
+  align-items: center;
+  max-width: 360px;
+  border-radius: 4px;
+  margin-top: 20px;
+  padding: 0 10px;
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.2);
+}
+
+.remove-button {
+  border: 0;
+  background: none;
+  color: red;
+  width: 30px;
+  height: 30px;
+  font-size: 24px;
+  flex: 0 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-button:hover {
+  background-color: #dedede;
+}

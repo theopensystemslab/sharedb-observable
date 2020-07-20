@@ -1,5 +1,5 @@
 import randomWords from "random-words";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo } from "react";
 import { connectToDB, getConnection } from "./sharedb";
 
 const loadNewFlow = () => {
@@ -8,16 +8,19 @@ const loadNewFlow = () => {
   window.location.reload();
 };
 
-const Flow: React.FC<{ id: string }> = ({ id }) => {
-  const [state, setState] = React.useState<any>();
-  const docRef = useRef(null);
+function useShareDB<T>(config: {
+  id: string;
+}): {
+  state: T | null;
+  submitOp: (ops: any[]) => void;
+} {
+  const [state, setState] = React.useState<T | null>(null);
+
+  const doc = useMemo(() => {
+    return getConnection(config.id);
+  }, [config.id]);
 
   useEffect(() => {
-    // should probably useContext or something rather than
-    // this useRef stuff
-    docRef.current = getConnection(id);
-    const doc = docRef.current;
-
     const cloneStateFromShareDB = () =>
       setState(JSON.parse(JSON.stringify(doc.data)));
 
@@ -27,20 +30,40 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
     });
 
     return () => {
-      docRef.current.destroy();
+      doc.destroy();
     };
-  }, []);
+  }, [doc]);
+
+  const submitOp = React.useCallback(
+    (op) => {
+      doc.submitOp(op);
+    },
+    [doc]
+  );
+
+  return {
+    state,
+    submitOp,
+  };
+}
+
+const Flow: React.FC<{ id: string }> = ({ id }) => {
+  const { state, submitOp } = useShareDB<{ nodes: any }>({ id });
+
+  if (state === null) {
+    return <p>Loading...</p>;
+  }
 
   return (
     <div>
-      {state?.nodes &&
+      {state.nodes &&
         Object.keys(state.nodes).map((k) => (
-          <Node key={k} doc={docRef.current} id={k} />
+          <Node key={k} submitOp={submitOp} id={k} />
         ))}
       <button
         onClick={() => {
           // add a node
-          docRef.current.submitOp([{ p: ["nodes", randomWords()], oi: {} }]);
+          submitOp([{ p: ["nodes", randomWords()], oi: {} }]);
         }}
       >
         ADD
@@ -51,11 +74,11 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
   );
 };
 
-const Node = React.memo(({ id, doc }: any) => (
+const Node = React.memo(({ id, submitOp }: any) => (
   <h1
     onClick={() => {
       // remove the node
-      doc.submitOp([{ p: ["nodes", id], od: doc.data.nodes[id] }]);
+      submitOp([{ p: ["nodes", id], od: { [id]: {} } }]);
     }}
   >
     {id} {Math.round(Math.random() * 1000)}

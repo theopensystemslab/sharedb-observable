@@ -1,30 +1,35 @@
 import randomWords from "random-words";
 import React, { useEffect, useMemo } from "react";
 import { connectToDB, getConnection } from "./sharedb";
+import {
+  Link,
+  BrowserRouter as Router,
+  useHistory,
+  useLocation,
+} from "react-router-dom";
 
-const loadNewFlow = () => {
-  window.location.href = [window.location.origin, randomWords()].join("#");
-  // should react to url change rather than full reload
-  window.location.reload();
+type Flow = {
+  nodes: Record<string, {}>;
+  edges: Array<[string | null, string]>;
 };
 
-function useShareDB<T>(config: {
+function useFlow(config: {
   id: string;
 }): {
-  state: T | null;
-  submitOp: (ops: any[]) => void;
+  state: Flow | null;
+  addNode: () => void;
+  removeNode: (id: string) => void;
 } {
-  const [state, setState] = React.useState<T | null>(null);
+  const [state, setState] = React.useState<Flow | null>(null);
 
-  const doc = useMemo(() => {
-    return getConnection(config.id);
-  }, [config.id]);
+  const doc = useMemo(() => getConnection(config.id), [config.id]);
 
   useEffect(() => {
     const cloneStateFromShareDB = () =>
       setState(JSON.parse(JSON.stringify(doc.data)));
 
     connectToDB(doc).then(() => {
+      console.log("connecting to db");
       cloneStateFromShareDB();
       doc.on("op", cloneStateFromShareDB);
     });
@@ -34,62 +39,105 @@ function useShareDB<T>(config: {
     };
   }, [doc]);
 
-  const submitOp = React.useCallback(
-    (op) => {
-      doc.submitOp(op);
+  const addNode = React.useCallback(() => {
+    doc.submitOp([{ p: ["nodes", randomWords()], oi: {} }]);
+  }, [doc]);
+
+  const removeNode = React.useCallback(
+    (id) => {
+      doc.submitOp([{ p: ["nodes", id], od: {} }]);
     },
     [doc]
   );
 
   return {
     state,
-    submitOp,
+    addNode,
+    removeNode,
   };
 }
 
 const Flow: React.FC<{ id: string }> = ({ id }) => {
-  const { state, submitOp } = useShareDB<{ nodes: any }>({ id });
+  const flow = useFlow({ id });
 
-  if (state === null) {
+  if (flow.state === null) {
     return <p>Loading...</p>;
   }
 
   return (
     <div>
-      {state.nodes &&
-        Object.keys(state.nodes).map((k) => (
-          <Node key={k} submitOp={submitOp} id={k} />
-        ))}
+      {Object.keys(flow.state.nodes).map((k) => (
+        <Node key={k} onRemove={flow.removeNode} id={k} />
+      ))}
       <button
         onClick={() => {
-          // add a node
-          submitOp([{ p: ["nodes", randomWords()], oi: {} }]);
+          flow.addNode();
         }}
       >
         ADD
       </button>
-
-      <button onClick={loadNewFlow}>New flow</button>
     </div>
   );
 };
 
-const Node = React.memo(({ id, submitOp }: any) => (
-  <h1
-    onClick={() => {
-      // remove the node
-      submitOp([{ p: ["nodes", id], od: { [id]: {} } }]);
-    }}
-  >
-    {id} {Math.round(Math.random() * 1000)}
-  </h1>
-));
+const Node = React.memo(
+  ({ id, onRemove }: { id: string; onRemove: (id: string) => void }) => (
+    <h1
+      onClick={() => {
+        // remove the node
+        onRemove(id);
+      }}
+    >
+      {id} {Math.round(Math.random() * 1000)}
+    </h1>
+  )
+);
 
 const App = () => {
-  let [, id] = window.location.href.split("#");
-  if (!id) loadNewFlow();
+  const history = useHistory();
+  const location = useLocation();
 
-  return <Flow id={id} />;
+  const id = React.useMemo(() => {
+    console.log("new ID");
+    if (location.hash.length < 2) {
+      return null;
+    }
+    return location.hash.slice(1);
+  }, [location]);
+
+  useEffect(() => {
+    if (id === null) {
+      history.push(`#${randomWords()}`);
+    }
+  }, [id]);
+
+  if (id === null) {
+    return <p>Redirecting...</p>;
+  }
+
+  return (
+    <div>
+      <nav>
+        <Link to="#direct">#direct</Link> <Link to="#captain">#captain</Link>{" "}
+        <button
+          onClick={() => {
+            history.push(`#${randomWords()}`);
+          }}
+        >
+          New flow
+        </button>
+      </nav>
+      <Flow id={id} />
+    </div>
+  );
 };
 
-export default App;
+const Container = () => {
+  return (
+    <Router>
+      <App />
+    </Router>
+  );
+};
+
+export default Container;

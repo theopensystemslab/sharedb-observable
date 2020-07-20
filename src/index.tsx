@@ -10,6 +10,10 @@ ReactDOM.render(
   document.getElementById("root")
 );
 
+fetch("/flow.json")
+  .then((res) => res.json())
+  .then(console.log.bind(console));
+
 // If you want your app to work offline and load faster, you can change
 // unregister() to register() below. Note this comes with some pitfalls.
 // Learn more about service workers: https://bit.ly/CRA-PWA

@@ -1,10 +1,10 @@
 import React from "react";
-import * as ReactDOM from "react-dom";
+import { createRoot } from "./react-experimental";
 import App from "./App";
 import * as serviceWorker from "./serviceWorker";
 import "./style.css";
 
-(ReactDOM as any).unstable_createRoot(document.getElementById("root")).render(
+createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>

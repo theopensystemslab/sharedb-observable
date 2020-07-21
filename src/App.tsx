@@ -1,16 +1,14 @@
 import randomWords from "random-words";
 import { v4 as uuid } from "uuid";
-import * as React from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { connectToDB, getConnection } from "./sharedb";
+import { useTransition } from "./react-experimental";
 import {
   Link,
   BrowserRouter as Router,
   useHistory,
   useLocation,
 } from "react-router-dom";
-
-const useTransition: () => [(fn: Function) => void, boolean] = (React as any)
-  .unstable_useTransition;
 
 interface Node {
   text: string;
@@ -35,11 +33,11 @@ function useFlow(config: {
 
   const [startTransition, isPending] = useTransition();
 
-  const [state, setState] = React.useState<Flow | null>(null);
+  const [state, setState] = useState<Flow | null>(null);
 
-  const doc = React.useMemo(() => getConnection(config.id), [config.id]);
+  const doc = useMemo(() => getConnection(config.id), [config.id]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const cloneStateFromShareDB = () =>
       startTransition(() => {
         setState(JSON.parse(JSON.stringify(doc.data)));
@@ -58,18 +56,18 @@ function useFlow(config: {
 
   // Methods
 
-  const addNode = React.useCallback(() => {
+  const addNode = useCallback(() => {
     doc.submitOp([{ p: ["nodes", uuid()], oi: { text: randomWords() } }]);
   }, [doc]);
 
-  const removeNode = React.useCallback(
+  const removeNode = useCallback(
     (id) => {
       doc.submitOp([{ p: ["nodes", id], od: {} }]);
     },
     [doc]
   );
 
-  const reset = React.useCallback(
+  const reset = useCallback(
     (flow) => {
       doc.submitOp([{ p: [], od: doc.data, oi: flow }]);
     },
@@ -180,7 +178,7 @@ const App = () => {
   const history = useHistory();
   const location = useLocation();
 
-  const id = React.useMemo(() => {
+  const id = useMemo(() => {
     if (location.hash.length < 2) {
       return null;
     }
@@ -188,7 +186,7 @@ const App = () => {
   }, [location]);
 
   // If there is no ID readable from the hash, redirect to a freshly created one
-  React.useEffect(() => {
+  useEffect(() => {
     if (id === null) {
       history.push(`#${randomWords()}`);
     }

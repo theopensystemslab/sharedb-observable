@@ -1,7 +1,8 @@
 import randomWords from "random-words";
 import { v4 as uuid } from "uuid";
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { connectToDB, getConnection } from "./sharedb";
+import { useTransition } from "./react-experimental";
 import {
   Link,
   BrowserRouter as Router,
@@ -26,16 +27,21 @@ function useFlow(config: {
   addNode: () => void;
   removeNode: (id: string) => void;
   reset: (flow: Flow) => void;
+  isPending: boolean;
 } {
   // Setup
 
-  const [state, setState] = React.useState<Flow | null>(null);
+  const [startTransition, isPending] = useTransition();
+
+  const [state, setState] = useState<Flow | null>(null);
 
   const doc = useMemo(() => getConnection(config.id), [config.id]);
 
   useEffect(() => {
     const cloneStateFromShareDB = () =>
-      setState(JSON.parse(JSON.stringify(doc.data)));
+      startTransition(() => {
+        setState(JSON.parse(JSON.stringify(doc.data)));
+      });
 
     connectToDB(doc).then(() => {
       cloneStateFromShareDB();
@@ -46,22 +52,22 @@ function useFlow(config: {
       setState(null);
       doc.destroy();
     };
-  }, [doc]);
+  }, [doc, startTransition]);
 
   // Methods
 
-  const addNode = React.useCallback(() => {
+  const addNode = useCallback(() => {
     doc.submitOp([{ p: ["nodes", uuid()], oi: { text: randomWords() } }]);
   }, [doc]);
 
-  const removeNode = React.useCallback(
+  const removeNode = useCallback(
     (id) => {
       doc.submitOp([{ p: ["nodes", id], od: {} }]);
     },
     [doc]
   );
 
-  const reset = React.useCallback(
+  const reset = useCallback(
     (flow) => {
       doc.submitOp([{ p: [], od: doc.data, oi: flow }]);
     },
@@ -75,6 +81,7 @@ function useFlow(config: {
     addNode,
     removeNode,
     reset,
+    isPending,
   };
 }
 
@@ -86,44 +93,47 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
   }
 
   return (
-    <main>
-      <button
-        onClick={() => {
-          flow.addNode();
-        }}
-      >
-        Add
-      </button>
-      <button
-        onClick={() => {
-          fetch("/flow.json")
-            .then((res) => res.json())
-            .then((flowData) => {
-              flow.reset(flowData);
+    <>
+      <main>
+        <button
+          onClick={() => {
+            flow.addNode();
+          }}
+        >
+          Add
+        </button>
+        <button
+          onClick={() => {
+            fetch("/flow.json")
+              .then((res) => res.json())
+              .then((flowData) => {
+                flow.reset(flowData);
+              });
+          }}
+        >
+          Import flow
+        </button>
+        <button
+          onClick={() => {
+            flow.reset({
+              nodes: {},
+              edges: [],
             });
-        }}
-      >
-        Import flow
-      </button>
-      <button
-        onClick={() => {
-          flow.reset({
-            nodes: {},
-            edges: [],
-          });
-        }}
-      >
-        Reset
-      </button>
-      {Object.keys(flow.state.nodes).map((k) => (
-        <NodeView
-          key={k}
-          onRemove={flow.removeNode}
-          id={k}
-          node={flow.state.nodes[k]}
-        />
-      ))}
-    </main>
+          }}
+        >
+          Reset
+        </button>
+        {Object.keys(flow.state.nodes).map((k) => (
+          <NodeView
+            key={k}
+            onRemove={flow.removeNode}
+            id={k}
+            node={flow.state.nodes[k]}
+          />
+        ))}
+      </main>
+      {flow.isPending && <div className="overlay" />}
+    </>
   );
 };
 
@@ -168,7 +178,7 @@ const App = () => {
   const history = useHistory();
   const location = useLocation();
 
-  const id = React.useMemo(() => {
+  const id = useMemo(() => {
     if (location.hash.length < 2) {
       return null;
     }

@@ -1,6 +1,6 @@
 import randomWords from "random-words";
 import { v4 as uuid } from "uuid";
-import React, { useEffect, useMemo } from "react";
+import * as React from "react";
 import { connectToDB, getConnection } from "./sharedb";
 import {
   Link,
@@ -8,6 +8,9 @@ import {
   useHistory,
   useLocation,
 } from "react-router-dom";
+
+const useTransition: () => [(fn: Function) => void, boolean] = (React as any)
+  .unstable_useTransition;
 
 interface Node {
   text: string;
@@ -26,16 +29,21 @@ function useFlow(config: {
   addNode: () => void;
   removeNode: (id: string) => void;
   reset: (flow: Flow) => void;
+  isPending: boolean;
 } {
   // Setup
 
+  const [startTransition, isPending] = useTransition();
+
   const [state, setState] = React.useState<Flow | null>(null);
 
-  const doc = useMemo(() => getConnection(config.id), [config.id]);
+  const doc = React.useMemo(() => getConnection(config.id), [config.id]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const cloneStateFromShareDB = () =>
-      setState(JSON.parse(JSON.stringify(doc.data)));
+      startTransition(() => {
+        setState(JSON.parse(JSON.stringify(doc.data)));
+      });
 
     connectToDB(doc).then(() => {
       cloneStateFromShareDB();
@@ -46,7 +54,7 @@ function useFlow(config: {
       setState(null);
       doc.destroy();
     };
-  }, [doc]);
+  }, [doc, startTransition]);
 
   // Methods
 
@@ -75,6 +83,7 @@ function useFlow(config: {
     addNode,
     removeNode,
     reset,
+    isPending,
   };
 }
 
@@ -86,44 +95,47 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
   }
 
   return (
-    <main>
-      <button
-        onClick={() => {
-          flow.addNode();
-        }}
-      >
-        Add
-      </button>
-      <button
-        onClick={() => {
-          fetch("/flow.json")
-            .then((res) => res.json())
-            .then((flowData) => {
-              flow.reset(flowData);
+    <>
+      <main>
+        <button
+          onClick={() => {
+            flow.addNode();
+          }}
+        >
+          Add
+        </button>
+        <button
+          onClick={() => {
+            fetch("/flow.json")
+              .then((res) => res.json())
+              .then((flowData) => {
+                flow.reset(flowData);
+              });
+          }}
+        >
+          Import flow
+        </button>
+        <button
+          onClick={() => {
+            flow.reset({
+              nodes: {},
+              edges: [],
             });
-        }}
-      >
-        Import flow
-      </button>
-      <button
-        onClick={() => {
-          flow.reset({
-            nodes: {},
-            edges: [],
-          });
-        }}
-      >
-        Reset
-      </button>
-      {Object.keys(flow.state.nodes).map((k) => (
-        <NodeView
-          key={k}
-          onRemove={flow.removeNode}
-          id={k}
-          node={flow.state.nodes[k]}
-        />
-      ))}
-    </main>
+          }}
+        >
+          Reset
+        </button>
+        {Object.keys(flow.state.nodes).map((k) => (
+          <NodeView
+            key={k}
+            onRemove={flow.removeNode}
+            id={k}
+            node={flow.state.nodes[k]}
+          />
+        ))}
+      </main>
+      {flow.isPending && <div className="overlay" />}
+    </>
   );
 };
 
@@ -176,7 +188,7 @@ const App = () => {
   }, [location]);
 
   // If there is no ID readable from the hash, redirect to a freshly created one
-  useEffect(() => {
+  React.useEffect(() => {
     if (id === null) {
       history.push(`#${randomWords()}`);
     }

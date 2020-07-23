@@ -1,41 +1,48 @@
 const WebSocketJSONStream = require("@teamwork/websocket-json-stream");
+const ShareDB = require("sharedb");
 const express = require("express");
 const http = require("http");
-const ShareDB = require("sharedb");
 const { Server } = require("ws");
+const jwt = require("jsonwebtoken");
 
-var backend = new ShareDB();
+const backend = new ShareDB();
 
-// createDoc(startServer);
-
-// (now doing this in the client instead, so that the ID can be dynamic)
-// function createDoc(callback) {
-//   var connection = backend.connect();
-//   var doc = connection.get("examples", "test");
-//   doc.fetch(function (err) {
-//     if (err) throw err;
-//     if (doc.type === null) {
-//       doc.create({ nodes: {}, edges: [] }, callback);
-//       return;
-//     }
-//     callback();
-//   });
-// }
+const JWT_SECRET = "shh";
 
 function startServer() {
-  // Create a web server to serve files and listen to WebSocket connections
-  var app = express();
-  app.use(express.static("static"));
-  var server = http.createServer(app);
+  const app = express();
 
-  // Connect any incoming WebSocket connection to ShareDB
-  var wss = new Server({ server });
-  wss.on("connection", function (ws) {
-    var stream = new WebSocketJSONStream(ws);
-    backend.listen(stream);
+  const server = http.createServer(app);
+
+  const wss = new Server({
+    server,
+    verifyClient: (info, cb) => {
+      // checks if JWT is included in cookies, does not allow connection if invalid
+      const [, token] = info.req.headers.cookie.match(/Authorization\=([^;]+)/);
+
+      if (!token) {
+        cb(false, 401, "Unauthorized");
+      } else {
+        jwt.verify(token, JWT_SECRET, (err, decoded) => {
+          if (err) {
+            cb(false, 401, "Unauthorized");
+          } else {
+            console.log({ newConnection: decoded });
+            info.req.user = decoded;
+            cb(true);
+          }
+        });
+      }
+    },
+  });
+
+  wss.on("connection", function (ws, req) {
+    const stream = new WebSocketJSONStream(ws);
+    backend.listen(stream, req.user);
   });
 
   server.listen(8080);
+
   console.log("Listening on http://localhost:8080");
 }
 

@@ -1,8 +1,13 @@
 import ReconnectingWebSocket from "reconnecting-websocket";
 import sharedb from "sharedb/lib/client";
 
+const JWT = process.env.REACT_APP_JWT;
+
+document.cookie = `X-Authorization=${JWT}; path=/`;
+
 const socket = new ReconnectingWebSocket("ws://localhost:8080");
-const connection = new sharedb.Connection(socket);
+
+const connection = new sharedb.Connection(socket, {});
 
 export const getConnection = (id) => connection.get("examples", id);
 

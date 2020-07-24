@@ -1,8 +1,15 @@
 import randomWords from "random-words";
-import { v4 as uuid } from "uuid";
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { connectToDB, getConnection } from "./sharedb";
 import { useTransition } from "./react-experimental";
+import {
+  Flow,
+  Node,
+  insertNodeOp,
+  removeNodeOp,
+  setFlowOp,
+  connectOp,
+} from "./flow";
 import {
   Link,
   BrowserRouter as Router,
@@ -10,23 +17,15 @@ import {
   useLocation,
 } from "react-router-dom";
 
-interface Node {
-  text: string;
-}
-
-type Flow = {
-  nodes: Record<string, Node>;
-  edges: Array<[string | null, string]>;
-};
-
 // Custom hook for talking to a flow in ShareDB
 function useFlow(config: {
   id: string;
 }): {
   state: Flow | null;
-  addNode: () => void;
+  insertNode: () => void;
   removeNode: (id: string) => void;
-  reset: (flow: Flow) => void;
+  connectNodes: (src: string, tgt: string) => void;
+  setFlow: (flow: Flow) => void;
   isPending: boolean;
 } {
   // Setup
@@ -56,20 +55,27 @@ function useFlow(config: {
 
   // Methods
 
-  const addNode = useCallback(() => {
-    doc.submitOp([{ p: ["nodes", uuid()], oi: { text: randomWords() } }]);
+  const insertNode = useCallback(() => {
+    doc.submitOp(insertNodeOp());
   }, [doc]);
 
   const removeNode = useCallback(
     (id) => {
-      doc.submitOp([{ p: ["nodes", id], od: {} }]);
+      doc.submitOp(removeNodeOp(id, doc.data));
     },
     [doc]
   );
 
-  const reset = useCallback(
+  const connectNodes = useCallback(
+    (src, tgt) => {
+      doc.submitOp(connectOp(src, tgt, doc.data));
+    },
+    [doc]
+  );
+
+  const setFlow = useCallback(
     (flow) => {
-      doc.submitOp([{ p: [], od: doc.data, oi: flow }]);
+      doc.submitOp(setFlowOp(flow, doc.data));
     },
     [doc]
   );
@@ -78,15 +84,32 @@ function useFlow(config: {
 
   return {
     state,
-    addNode,
+    insertNode,
     removeNode,
-    reset,
+    setFlow,
+    connectNodes,
     isPending,
   };
 }
 
-const Flow: React.FC<{ id: string }> = ({ id }) => {
+const FlowView: React.FC<{ id: string }> = ({ id }) => {
   const flow = useFlow({ id });
+
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const onSelect = useCallback(
+    (id: string) => {
+      if (selected === null) {
+        setSelected(id);
+      } else if (selected === id) {
+        setSelected(null);
+      } else {
+        flow.connectNodes(selected, id);
+        setSelected(null);
+      }
+    },
+    [selected, setSelected]
+  );
 
   if (flow.state === null) {
     return <p>Loading...</p>;
@@ -97,7 +120,7 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
       <main>
         <button
           onClick={() => {
-            flow.addNode();
+            flow.insertNode();
           }}
         >
           Add
@@ -106,8 +129,8 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
           onClick={() => {
             fetch("/flow.json")
               .then((res) => res.json())
-              .then((flowData) => {
-                flow.reset(flowData);
+              .then((flowData: Flow) => {
+                flow.setFlow(flowData);
               });
           }}
         >
@@ -115,7 +138,7 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
         </button>
         <button
           onClick={() => {
-            flow.reset({
+            flow.setFlow({
               nodes: {},
               edges: [],
             });
@@ -123,14 +146,30 @@ const Flow: React.FC<{ id: string }> = ({ id }) => {
         >
           Reset
         </button>
-        {Object.keys(flow.state.nodes).map((k) => (
-          <NodeView
-            key={k}
-            onRemove={flow.removeNode}
-            id={k}
-            node={flow.state.nodes[k]}
-          />
-        ))}
+        <div className="row mt">
+          <div>
+            <h3>Nodes</h3>
+            {Object.keys(flow.state.nodes).map((k) => (
+              <NodeView
+                key={k}
+                onRemove={flow.removeNode}
+                onSelect={onSelect}
+                id={k}
+                node={flow.state.nodes[k]}
+                activeId={selected}
+              />
+            ))}
+          </div>
+          <div>
+            <h3>Edges</h3>
+            {flow.state.edges.map(([src, tgt]) => (
+              <p>
+                {src ? src.slice(0, 6) : "root"} -{" "}
+                {tgt ? tgt.slice(0, 6) : "root"}
+              </p>
+            ))}
+          </div>
+        </div>
       </main>
       {flow.isPending && <div className="overlay" />}
     </>
@@ -142,12 +181,16 @@ const NodeView = React.memo(
     id,
     node,
     onRemove,
+    onSelect,
+    activeId,
   }: {
     id: string;
     node: Node;
     onRemove: (id: string) => void;
+    onSelect: (id: string) => void;
+    activeId: string | null;
   }) => (
-    <div className="node">
+    <div className={`node ${id === activeId ? "node--active" : ""}`}>
       <button
         className="remove-button"
         onClick={() => {
@@ -156,14 +199,33 @@ const NodeView = React.memo(
       >
         ×
       </button>
-      <p>
-        {node.text || "unset"} {Math.round(Math.random() * 1000)}
-      </p>
+      <div>
+        <p>
+          {node.text || "unset"}{" "}
+          <small>{Math.round(Math.random() * 1000)}</small>
+        </p>
+        <p>
+          <small>{id.slice(0, 6)}..</small>
+        </p>
+      </div>
+      <button
+        onClick={() => {
+          onSelect(id);
+        }}
+      >
+        {activeId === id
+          ? "Deselect"
+          : activeId !== null
+          ? "Connect"
+          : "Select"}
+      </button>
     </div>
   ),
   (prevProps, nextProps) =>
     prevProps.id === nextProps.id &&
     prevProps.onRemove === nextProps.onRemove &&
+    prevProps.onSelect === nextProps.onSelect &&
+    prevProps.activeId === nextProps.activeId &&
     JSON.stringify(prevProps.node) === JSON.stringify(nextProps.node)
 );
 
@@ -209,7 +271,7 @@ const App = () => {
           New flow
         </button>
       </nav>
-      <Flow id={id} />
+      <FlowView id={id} />
     </div>
   );
 };

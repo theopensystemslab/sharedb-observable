@@ -1,3 +1,7 @@
+* {
+  font-family: monospace;
+}
+
 nav {
   padding: 20px;
   border-bottom: 1px solid #cecece;
@@ -5,6 +9,14 @@ nav {
 
 main {
   padding: 20px;
+}
+
+small {
+  opacity: 0.8;
+}
+
+p {
+  margin: 0;
 }
 
 button,
@@ -18,9 +30,18 @@ a {
   align-items: center;
   max-width: 360px;
   border-radius: 4px;
-  margin-top: 20px;
-  padding: 0 10px;
+  margin-bottom: 20px;
+  padding: 8px 10px;
   box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.2);
+  border: 1px solid transparent;
+}
+
+.node--active {
+  border-color: blue;
+}
+
+.node > * {
+  margin-right: 8px;
 }
 
 .remove-button {
@@ -38,6 +59,20 @@ a {
 
 .remove-button:hover {
   background-color: #dedede;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-gap: 20px;
+}
+
+.mt {
+  margin-top: 20px;
+}
+
+.mb {
+  margin-bottom: 20px;
 }
 
 .overlay {
